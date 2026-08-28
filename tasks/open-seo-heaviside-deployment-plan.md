@@ -61,7 +61,7 @@ Piece 2: Standalone infrastructure deployment — complete on 2026-08-28.
 
 - Coolify app: `open-seo` (`q10b1qtr143hu5dfebt9fo2u`) on `apps-vps`.
 - Deployed source: `cvsloane/open-seo`, branch
-  `heaviside/postgres-selfhost`, pinned commit `8050d8d`.
+  `heaviside/postgres-selfhost`, pinned commit `6c28196`.
 - Private URL: `http://100.77.226.26:3301` (tailnet only; public-IP access
   denied by the host firewall).
 - Database: dedicated `open_seo` database and role on `db-vps`; application
@@ -72,8 +72,9 @@ Piece 2: Standalone infrastructure deployment — complete on 2026-08-28.
   `OPEN_SEO_DATAFORSEO_API_KEY`.
 - Telemetry is disabled and auto-deploy is disabled.
 - Deployed verification passed: UI root `200`, browser dashboard render,
-  repeated `/api/health` database checks, 21 applied migrations / 34 public
-  tables, and the free DataForSEO account probe. The public-IP port probe timed
+  six concurrent dashboard renders, repeated `/api/health` database checks, 21
+  applied migrations / 34 public tables, and the free DataForSEO account probe.
+  The post-load runtime error scan was clean, and the public-IP port probe timed
   out as intended.
 - Runtime environment and data paths contain no HG Market Report variables,
   endpoints, database access, webhook, or application dependency.
