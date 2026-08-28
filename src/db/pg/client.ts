@@ -24,36 +24,6 @@ const pgClientStore = new AsyncLocalStorage<{
   db: ReturnType<typeof createPgDb>;
 }>();
 
-let directStore:
-  | {
-      connectionString: string;
-      sql: Sql;
-      db: ReturnType<typeof createPgDb>;
-    }
-  | undefined;
-
-function getDirectStore(connectionString: string) {
-  if (!directStore) {
-    const sql = withQueryRetries(
-      postgres(connectionString, {
-        max: 10,
-        fetch_types: false,
-        prepare: false,
-        connect_timeout: 10,
-      }),
-    );
-    directStore = { connectionString, sql, db: createPgDb(sql) };
-  }
-
-  if (directStore.connectionString !== connectionString) {
-    throw new Error(
-      "POSTGRES_DATABASE_URL changed after the Docker connection pool started. Restart the process to apply it.",
-    );
-  }
-
-  return directStore;
-}
-
 export const pgDb = new Proxy(
   {},
   {
@@ -80,10 +50,9 @@ export const pgDb = new Proxy(
  * Wrap every entrypoint that touches the DB: the `fetch` handler, the
  * `scheduled` cron, and each WorkflowEntrypoint `run`.
  *
- * Workers use a request-scoped Hyperdrive client with one connection. Docker
- * owns one process-scoped pool that connects through PgBouncer; request scopes
- * borrow that pool so streamed responses keep a valid client after the fetch
- * handler returns.
+ * Both Workers and the Docker preview runtime enforce request ownership for
+ * socket I/O, so every request creates its client inside that request's scope.
+ * PgBouncer owns the reusable origin pool for Docker deployments.
  */
 export async function withPgClient<T>(fn: () => Promise<T>): Promise<T> {
   if (getDatabaseProvider() !== "postgres") {
@@ -97,14 +66,10 @@ export async function withPgClient<T>(fn: () => Promise<T>): Promise<T> {
     return fn();
   }
   const connection = getPostgresConnection();
-  if (connection.runtime === "direct") {
-    const store = getDirectStore(connection.connectionString);
-    return pgClientStore.run(store, fn);
-  }
-
   const rawSql = postgres(connection.connectionString, {
     max: 1,
     fetch_types: false,
+    prepare: connection.runtime !== "direct",
     // Bound connect stalls (seconds) so the per-query retry in
     // withQueryRetries gets its turn within the request's lifetime instead
     // of hanging on postgres.js's 30s default during a failover.
