@@ -57,12 +57,29 @@ This piece is not authorized by the current installation request and remains pen
 
 ## Current piece
 
-Piece 2: Standalone infrastructure deployment.
+Piece 2: Standalone infrastructure deployment — complete on 2026-08-28.
 
-Piece 1 landed on branch `heaviside/postgres-selfhost`. Focused provider/retry
-tests passed, TypeScript passed, and the production Dockerfile built image
-`sha256:456a9c29bcc0507188836a9760c6c367b88a1a9f7ebe24ba45f334c8f790124c`.
+- Coolify app: `open-seo` (`q10b1qtr143hu5dfebt9fo2u`) on `apps-vps`.
+- Deployed source: `cvsloane/open-seo`, branch
+  `heaviside/postgres-selfhost`, pinned commit `8050d8d`.
+- Private URL: `http://100.77.226.26:3301` (tailnet only; public-IP access
+  denied by the host firewall).
+- Database: dedicated `open_seo` database and role on `db-vps`; application
+  traffic uses PgBouncer `:6543`, while startup migrations use Postgres
+  `:5432`.
+- Standalone secrets: Infrastructure Bitwarden keys
+  `OPEN_SEO_DATABASE_URL`, `OPEN_SEO_PGBOUNCER_DATABASE_URL`, and
+  `OPEN_SEO_DATAFORSEO_API_KEY`.
+- Telemetry is disabled and auto-deploy is disabled.
+- Deployed verification passed: UI root `200`, browser dashboard render,
+  repeated `/api/health` database checks, 21 applied migrations / 34 public
+  tables, and the free DataForSEO account probe. The public-IP port probe timed
+  out as intended.
+- Runtime environment and data paths contain no HG Market Report variables,
+  endpoints, database access, webhook, or application dependency.
 
 ## Next piece
 
-Provision and deploy the standalone service on `db-vps` and `apps-vps`.
+Use the standalone service and decide which proven capability HOS should own.
+Piece 3 remains a separately reviewed HOS change; do not create a direct shared
+database or implicit HG Market Report dependency during that integration.
