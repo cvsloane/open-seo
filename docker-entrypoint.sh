@@ -13,7 +13,12 @@ echo 'OpenSEO sends an anonymous usage heartbeat (counts only). Disable: OPENSEO
 # in seconds with the exact fix instead of after a multi-minute build.
 pnpm exec tsx scripts/selfhost-preflight.ts
 
-pnpm run db:migrate:local
+if [ "${DATABASE_PROVIDER:-d1}" = "postgres" ]; then
+  POSTGRES_DATABASE_URL="${POSTGRES_MIGRATION_DATABASE_URL:-${POSTGRES_DATABASE_URL:-}}" \
+    pnpm run db:migrate:pg
+else
+  pnpm run db:migrate:local
+fi
 
 # POSTHOG_SOURCEMAPS (CI sourcemap uploads) moves vite's outDir; keep the
 # fingerprint marker beside the output it describes.

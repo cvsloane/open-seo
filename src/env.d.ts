@@ -28,6 +28,8 @@ declare namespace Cloudflare {
     HYPERDRIVE?: {
       connectionString: string;
     };
+    CLOUDFLARE_INCLUDE_PROCESS_ENV?: string;
+    POSTGRES_DATABASE_URL?: string;
     GOOGLE_CLIENT_ID?: string;
     GOOGLE_CLIENT_SECRET?: string;
     LOOPS_API_KEY?: string;

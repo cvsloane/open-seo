@@ -2,10 +2,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import {
-  getDatabaseProvider,
-  getPostgresConnectionString,
-} from "@/db/provider";
+import { getDatabaseProvider, getPostgresConnection } from "@/db/provider";
 import { withQueryRetries } from "./retry";
 import * as schema from "./schema";
 
@@ -26,6 +23,36 @@ const pgClientStore = new AsyncLocalStorage<{
   sql: Sql;
   db: ReturnType<typeof createPgDb>;
 }>();
+
+let directStore:
+  | {
+      connectionString: string;
+      sql: Sql;
+      db: ReturnType<typeof createPgDb>;
+    }
+  | undefined;
+
+function getDirectStore(connectionString: string) {
+  if (!directStore) {
+    const sql = withQueryRetries(
+      postgres(connectionString, {
+        max: 10,
+        fetch_types: false,
+        prepare: false,
+        connect_timeout: 10,
+      }),
+    );
+    directStore = { connectionString, sql, db: createPgDb(sql) };
+  }
+
+  if (directStore.connectionString !== connectionString) {
+    throw new Error(
+      "POSTGRES_DATABASE_URL changed after the Docker connection pool started. Restart the process to apply it.",
+    );
+  }
+
+  return directStore;
+}
 
 export const pgDb = new Proxy(
   {},
@@ -53,12 +80,10 @@ export const pgDb = new Proxy(
  * Wrap every entrypoint that touches the DB: the `fetch` handler, the
  * `scheduled` cron, and each WorkflowEntrypoint `run`.
  *
- * Per Hyperdrive's guidance we use a single connection (`max: 1` — Hyperdrive
- * pools the origin connections at the edge, so a client-side pool only adds
- * stale-connection risk) and do NOT call `sql.end()`: the Workers↔Hyperdrive
- * socket is torn down automatically when the invocation ends, and the pooled
- * origin connection stays warm for reuse. Not ending it also means a streamed
- * response can keep querying after the handler returns.
+ * Workers use a request-scoped Hyperdrive client with one connection. Docker
+ * owns one process-scoped pool that connects through PgBouncer; request scopes
+ * borrow that pool so streamed responses keep a valid client after the fetch
+ * handler returns.
  */
 export async function withPgClient<T>(fn: () => Promise<T>): Promise<T> {
   if (getDatabaseProvider() !== "postgres") {
@@ -71,15 +96,20 @@ export async function withPgClient<T>(fn: () => Promise<T>): Promise<T> {
   if (pgClientStore.getStore()) {
     return fn();
   }
-  const sql = withQueryRetries(
-    postgres(getPostgresConnectionString(), {
-      max: 1,
-      fetch_types: false,
-      // Bound connect stalls (seconds) so the per-query retry in
-      // withQueryRetries gets its turn within the request's lifetime instead
-      // of hanging on postgres.js's 30s default during a failover.
-      connect_timeout: 10,
-    }),
-  );
+  const connection = getPostgresConnection();
+  if (connection.runtime === "direct") {
+    const store = getDirectStore(connection.connectionString);
+    return pgClientStore.run(store, fn);
+  }
+
+  const rawSql = postgres(connection.connectionString, {
+    max: 1,
+    fetch_types: false,
+    // Bound connect stalls (seconds) so the per-query retry in
+    // withQueryRetries gets its turn within the request's lifetime instead
+    // of hanging on postgres.js's 30s default during a failover.
+    connect_timeout: 10,
+  });
+  const sql = withQueryRetries(rawSql);
   return pgClientStore.run({ sql, db: createPgDb(sql) }, fn);
 }

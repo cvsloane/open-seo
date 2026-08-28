@@ -2,6 +2,17 @@ import { env } from "cloudflare:workers";
 
 type DatabaseProvider = "d1" | "postgres";
 
+type PostgresEnv = {
+  HYPERDRIVE?: { connectionString?: string };
+  CLOUDFLARE_INCLUDE_PROCESS_ENV?: string;
+  POSTGRES_DATABASE_URL?: string;
+};
+
+type PostgresConnection = {
+  connectionString: string;
+  runtime: "hyperdrive" | "direct";
+};
+
 export function getDatabaseProvider(): DatabaseProvider {
   const provider = Reflect.get(env, "DATABASE_PROVIDER");
 
@@ -18,20 +29,27 @@ export function getDatabaseProvider(): DatabaseProvider {
   );
 }
 
-// Postgres is only reachable through the HYPERDRIVE binding — never a direct
-// connection string from a Worker var. In local dev the binding resolves to
-// `localConnectionString` from wrangler.jsonc (miniflare never contacts real
-// Hyperdrive), so the same code path covers both.
-export function getPostgresConnectionString() {
-  const hyperdrive = Reflect.get(env, "HYPERDRIVE") as
-    | { connectionString?: string }
-    | undefined;
-  const hyperdriveUrl = hyperdrive?.connectionString?.trim();
+// Workers reach Postgres only through HYPERDRIVE. The Docker self-host runtime
+// can use a direct URL because CLOUDFLARE_INCLUDE_PROCESS_ENV is its explicit
+// process-env bridge; a bare Worker var never enables the direct path.
+export function resolvePostgresConnection(
+  runtimeEnv: PostgresEnv,
+): PostgresConnection {
+  const hyperdriveUrl = runtimeEnv.HYPERDRIVE?.connectionString?.trim();
   if (hyperdriveUrl) {
-    return hyperdriveUrl;
+    return { connectionString: hyperdriveUrl, runtime: "hyperdrive" };
+  }
+
+  const directUrl = runtimeEnv.POSTGRES_DATABASE_URL?.trim();
+  if (runtimeEnv.CLOUDFLARE_INCLUDE_PROCESS_ENV === "true" && directUrl) {
+    return { connectionString: directUrl, runtime: "direct" };
   }
 
   throw new Error(
-    "DATABASE_PROVIDER=postgres requires a HYPERDRIVE binding (in local dev, its localConnectionString).",
+    "DATABASE_PROVIDER=postgres requires a HYPERDRIVE binding, or POSTGRES_DATABASE_URL in the Docker self-host runtime.",
   );
+}
+
+export function getPostgresConnection() {
+  return resolvePostgresConnection(env);
 }

@@ -35,6 +35,28 @@ Optional env values:
 - `OPEN_SEO_IMAGE` (defaults to `ghcr.io/every-app/open-seo:latest`)
 - `OPENROUTER_API_KEY` (required for AI features such as SAM; see [OpenRouter](https://openrouter.ai/settings/keys))
 
+### PostgreSQL backend (optional)
+
+Docker uses its persistent D1/SQLite volume by default. To use PostgreSQL,
+build the image from this checkout so it includes the direct PostgreSQL
+runtime, then set these values in `.env`:
+
+```sh
+docker build -f Dockerfile.selfhost -t open-seo:postgres .
+```
+
+```env
+OPEN_SEO_IMAGE=open-seo:postgres
+DATABASE_PROVIDER=postgres
+POSTGRES_DATABASE_URL=postgresql://user:password@db-vps:6543/open_seo
+POSTGRES_MIGRATION_DATABASE_URL=postgresql://user:password@db-vps:5432/open_seo
+```
+
+Use a pooled PgBouncer URL for `POSTGRES_DATABASE_URL`. Startup migrations use
+`POSTGRES_MIGRATION_DATABASE_URL` when it is set; keep that URL on the direct
+PostgreSQL port. If the migration URL is omitted, startup uses
+`POSTGRES_DATABASE_URL` for both operations.
+
 If you are putting Docker behind a reverse proxy or a temporary tunnel, remember that Docker self-hosting runs with app auth disabled. Only expose it behind your own auth-protected reverse proxy, tunnel, or private network, and add the public hostname before restarting:
 
 ```bash
