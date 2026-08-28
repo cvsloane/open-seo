@@ -19,13 +19,21 @@ async function upsertDelegatedOrganization(input: DelegatedOrganizationInput) {
       createdAt: new Date(),
       metadata: null,
     })
-    .onConflictDoUpdate({
-      target: organization.id,
-      set: {
-        name: input.name,
-        slug: input.slug,
-      },
-    });
+    // Parallel first-load requests can collide on both the id and slug unique
+    // indexes. Let either identical insert win, then update by id below.
+    .onConflictDoNothing();
+
+  const [ensured] = await db
+    .update(organization)
+    .set({ name: input.name, slug: input.slug })
+    .where(eq(organization.id, input.id))
+    .returning({ id: organization.id });
+
+  if (!ensured) {
+    throw new Error(
+      `Organization slug "${input.slug}" belongs to a different organization.`,
+    );
+  }
 }
 
 async function findFirstOrganizationIdForUser(userId: string) {
