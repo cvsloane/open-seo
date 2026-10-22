@@ -1,5 +1,13 @@
 # Use the full Node image so workerd has a working CA trust store for outbound HTTPS.
-FROM node:22
+FROM node:22.23.4-bookworm
+
+# Bookworm's installed CA bundle still trusts these affected eMudhra paths.
+# Disable them for workerd and other clients using the system trust store.
+RUN sed -i \
+    -e 's#^mozilla/Comodo_AAA_Services_root.crt$#!mozilla/Comodo_AAA_Services_root.crt#' \
+    -e 's#^mozilla/emSign_ECC_Root_CA_-_G3.crt$#!mozilla/emSign_ECC_Root_CA_-_G3.crt#' \
+    /etc/ca-certificates.conf \
+  && update-ca-certificates --fresh
 
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
